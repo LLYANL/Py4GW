@@ -1,11 +1,14 @@
 from Py4GWCoreLib import Timer
 from Py4GWCoreLib import Utils
 from Py4GWCoreLib import ConsoleLog
+from Py4GWCoreLib import ActionQueueManager
 from time import sleep
+import time
 from .enums import *
 import inspect
 import math
 from typing import List, Tuple, Callable
+from datetime import datetime, timezone
 """
 from .Map import Map
 from .Party import Party
@@ -809,6 +812,21 @@ class Routines:
             spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: GLOBAL_CACHE.Agent.IsSpawned(agent_id))
             spirit_array = AgentArray.Sort.ByDistance(spirit_array, GLOBAL_CACHE.Player.GetXY())
             return Utils.GetFirstFromArray(spirit_array)
+        
+        @staticmethod
+        def GetFilteredSpiritArray(x, y, max_distance=4500.0):
+            from .AgentArray import AgentArray
+            """
+            Purpose: filters spirits within the specified range.
+            Args:
+                range (int): The maximum distance to search for spirits.
+            Returns: List of spirit agent IDs
+            """
+            spirit_array = GLOBAL_CACHE.AgentArray.GetSpiritPetArray()
+            spirit_array = AgentArray.Filter.ByDistance(spirit_array, (x,y), max_distance)
+            spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
+            spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: GLOBAL_CACHE.Agent.IsSpawned(agent_id))
+            return spirit_array
             
         @staticmethod
         def GetLowestMinion(max_distance=4500.0):
@@ -820,6 +838,21 @@ class Routines:
             minion_array = AgentArray.Sort.ByHealth(minion_array)
             return Utils.GetFirstFromArray(minion_array)            
             
+        @staticmethod
+        def GetFilteredMinionArray(x, y, max_distance=4500.0):
+            from .AgentArray import AgentArray
+            """
+            Purpose: filters minions within the specified range.
+            Args:
+                range (int): The maximum distance to search for minions.
+            Returns: List of minion agent IDs
+            """
+            minion_array = GLOBAL_CACHE.AgentArray.GetMinionArray()
+            minion_array = AgentArray.Filter.ByDistance(minion_array, (x,y), max_distance)
+            minion_array = AgentArray.Filter.ByCondition(minion_array, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
+            return minion_array    
+        
+        
         @staticmethod
         def GetNearestItem(max_distance=4500.0):
             from .AgentArray import AgentArray
@@ -847,7 +880,7 @@ class Routines:
                 range (int): The maximum distance to search for chests.
             Returns: Agent ID or None
             """
-            gadget_array = GLOBAL_CACHE.AgentArray.GetGadgetArray()
+            gadget_array = AgentArray.GetGadgetArray()
             gadget_array = AgentArray.Filter.ByDistance(gadget_array, GLOBAL_CACHE.Player.GetXY(), max_distance)
             gadget_array = AgentArray.Sort.ByDistance(gadget_array,GLOBAL_CACHE.Player.GetXY())
             for agent_id in gadget_array:
@@ -1322,8 +1355,13 @@ class Routines:
             def FollowPath(path_points: List[Tuple[float, float]], custom_exit_condition:Callable[[], bool] =lambda: False, tolerance:float=150):
                 import random
                 from .Player import Player
+                from .Map import Map
+                from .Party import Party
 
                 for idx, (target_x, target_y) in enumerate(path_points):
+                    if not Routines.Checks.Map.MapValid():
+                        return []
+                        
                     GLOBAL_CACHE.Player.Move(target_x, target_y)
                         
                     current_x, current_y = Player.GetXY()
@@ -1332,6 +1370,10 @@ class Routines:
                     while True:
                         if custom_exit_condition():
                             return
+                        
+                        if not Routines.Checks.Map.MapValid():
+                            return []
+                        
                         
                         current_x, current_y = Player.GetXY()
                         current_distance = Utils.Distance((current_x, current_y), (target_x, target_y))
@@ -1760,9 +1802,14 @@ class Routines:
             @staticmethod
             def LootItems(item_array:list[int], log=False):
                 from .Agent import Agent
+                from .Map import Map
                 if len(item_array) == 0:
                     return
                 
+                if not Routines.Checks.Map.MapValid():
+                    ActionQueueManager().ResetAllQueues()
+                    return
+
                 while len (item_array) > 0:
                     item_id = item_array.pop(0)
                     if item_id == 0:
@@ -1770,7 +1817,13 @@ class Routines:
                     if not Agent.IsValid(item_id):
                         continue
                     item_x, item_y = Agent.GetXY(item_id)
+                    if not Routines.Checks.Map.MapValid():
+                        ActionQueueManager().ResetAllQueues()
+                        return
                     Routines.Sequential.Movement.FollowPath([(item_x, item_y)])
+                    if not Routines.Checks.Map.MapValid():
+                        ActionQueueManager().ResetAllQueues()
+                        return
                     if Agent.IsValid(item_id):
                         GLOBAL_CACHE.Player.Interact(item_id, False)
                         sleep(1.250)
@@ -1831,9 +1884,14 @@ class Routines:
 
         class Movement:
             @staticmethod
-            def FollowPath(path_points: List[Tuple[float, float]], custom_exit_condition:Callable[[], bool] =lambda: False, tolerance:float=150,log=False):
+            def FollowPath(path_points: List[Tuple[float, float]], custom_exit_condition:Callable[[], bool] =lambda: False, tolerance:float=150,log=False, timeout:int=-1):
                 import random
+                start_time =  Utils.GetBaseTimestamp()
                 for idx, (target_x, target_y) in enumerate(path_points):
+                    if not Routines.Checks.Map.MapValid():
+                        ActionQueueManager().ResetAllQueues()
+                        return False
+                    
                     GLOBAL_CACHE.Player.Move(target_x, target_y)
 
                     current_x, current_y = GLOBAL_CACHE.Player.GetXY()
@@ -1843,7 +1901,18 @@ class Routines:
                         if custom_exit_condition():
                             if log:
                                 ConsoleLog("FollowPath", "Custom exit condition met, stopping movement.", Console.MessageType.Info)
-                            return
+                            return False
+                        
+                        if not Routines.Checks.Map.MapValid():
+                            ActionQueueManager().ResetAllQueues()
+                            return False
+                        
+                        current_time = Utils.GetBaseTimestamp()
+                        
+                        delta = current_time - start_time
+                        if delta > timeout and timeout > 0:
+                            ConsoleLog("FollowPath", "Timeout reached, stopping movement.", Console.MessageType.Warning)
+                            return False
                         
                         current_x, current_y = GLOBAL_CACHE.Player.GetXY()
                         current_distance = Utils.Distance((current_x, current_y), (target_x, target_y))
@@ -1855,7 +1924,13 @@ class Routines:
                             offset_y = random.uniform(-5, 5)
                             if log:
                                 ConsoleLog("FollowPath", f"move to {target_x + offset_x}, {target_y + offset_y}", Console.MessageType.Info)
+                            
+                            if not Routines.Checks.Map.MapValid():
+                                ActionQueueManager().ResetAllQueues()
+                                return False
+                            
                             GLOBAL_CACHE.Player.Move(target_x + offset_x, target_y + offset_y)
+                            
                         previous_distance = current_distance                    
                         
                         # Check if arrived
@@ -1866,6 +1941,8 @@ class Routines:
                                 ConsoleLog("FollowPath", f"Current distance to target: {current_distance}, waiting...", Console.MessageType.Info)
 
                         yield from Routines.Yield.wait(500)
+                    
+                return True
 
         class Skills:
             @staticmethod
@@ -1882,7 +1959,7 @@ class Routines:
                 yield from Routines.Yield.wait(500)
             
             @staticmethod    
-            def CastSkillID (skill_id:int,extra_condition=True, log=False):
+            def CastSkillID (skill_id:int,extra_condition=True, aftercast_delay=0,  log=False):
                 if not GLOBAL_CACHE.Map.IsMapReady():
                     return False
                 player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
@@ -1897,7 +1974,7 @@ class Routines:
                 return True
 
             @staticmethod
-            def CastSkillSlot(slot:int,extra_condition=True, log=False):
+            def CastSkillSlot(slot:int,extra_condition=True, aftercast_delay=0, log=False):
                 player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
                 skill_id = GLOBAL_CACHE.SkillBar.GetSkillIDBySlot(slot)
                 enough_energy = Routines.Checks.Skills.HasEnoughEnergy(player_agent_id,skill_id)
@@ -1947,7 +2024,35 @@ class Routines:
                 ConsoleLog("TravelToOutpost", f"Arrived at {GLOBAL_CACHE.Map.GetMapName(outpost_id)}", log=log)
     
             @staticmethod
-            def WaitforMapLoad(map_id, log=False):
+            def TravelToRegion(outpost_id, region, district, language=0, log=False):
+                """
+                Purpose: Positions yourself safely on the outpost.
+                Args:
+                    outpost_id (int): The ID of the outpost to travel to.
+                    region (int): The region ID to travel to.
+                    district (int): The district ID to travel to.
+                    laguage (int): The language ID to travel to. Default is 0.
+                    log (bool) Optional: Whether to log the action. Default is True.
+                Returns: None
+                """
+                
+                if GLOBAL_CACHE.Map.GetMapID() != outpost_id:
+                    ConsoleLog("TravelToRegion", f"Travelling to {GLOBAL_CACHE.Map.GetMapName(outpost_id)}", log=log)
+                    GLOBAL_CACHE.Map.TravelToRegion(outpost_id, region, district, language)
+                    yield from Routines.Yield.wait(2000)
+                    waititng_for_map_load = True
+                    while waititng_for_map_load:
+                        if GLOBAL_CACHE.Map.IsMapReady() and GLOBAL_CACHE.Party.IsPartyLoaded() and GLOBAL_CACHE.Map.GetMapID() == outpost_id:
+                            waititng_for_map_load = False
+                            break
+                        yield from Routines.Yield.wait(1000)
+                    yield from Routines.Yield.wait(1000)
+                
+                ConsoleLog("TravelToRegion", f"Arrived at {GLOBAL_CACHE.Map.GetMapName(outpost_id)}", log=log)
+    
+    
+            @staticmethod
+            def WaitforMapLoad(map_id, log=False, timeout:int=10000):
                 """
                 Purpose: Positions yourself safely on the map.
                 Args:
@@ -1955,16 +2060,23 @@ class Routines:
                     log (bool) Optional: Whether to log the action. Default is True.
                 Returns: None
                 """
+                start_time = Utils.GetBaseTimestamp()
                 waititng_for_map_load = True
                 while waititng_for_map_load:
                     if not Routines.Checks.Map.MapValid():
                         yield from Routines.Yield.wait(1000)
                         ConsoleLog("WaitforMapLoad", "Map not valid, waiting...", log=log)
                         continue
-                        
-                    if not GLOBAL_CACHE.Map.GetMapID() == map_id:
+                    
+                    delta = Utils.GetBaseTimestamp() - start_time
+                    if delta > timeout and timeout > 0:
+                        ConsoleLog("WaitforMapLoad", "Timeout reached, stopping waiting for map load.", log=log)
+                        return False
+                       
+                    current_map = GLOBAL_CACHE.Map.GetMapID()
+                    if not current_map == map_id:
                         yield from Routines.Yield.wait(1000)
-                        ConsoleLog("WaitforMapLoad", f"Waiting for map load {map_id}", log=log)
+                        ConsoleLog("WaitforMapLoad", f"Waiting for map load {map_id} (current: {current_map})", log=log)
                         continue
                 
                     waititng_for_map_load = False
@@ -1972,6 +2084,7 @@ class Routines:
                 
                 ConsoleLog("WaitforMapLoad", f"Arrived at {GLOBAL_CACHE.Map.GetMapName(map_id)}", log=log)
                 yield from Routines.Yield.wait(1000)
+                return True
                 
         class Agents:
             @staticmethod
@@ -2255,7 +2368,7 @@ class Routines:
                 gold_amount_on_character = GLOBAL_CACHE.Inventory.GetGoldOnCharacter()
                 gold_amount_on_storage = GLOBAL_CACHE.Inventory.GetGoldInStorage()
                 
-                max_allowed_gold = 100000  # Max storage limit
+                max_allowed_gold = 1_000_000  # Max storage limit
                 available_space = max_allowed_gold - gold_amount_on_storage  # How much can be deposited
 
                 # Calculate how much gold we need to deposit
@@ -2265,9 +2378,14 @@ class Routines:
                 gold_to_deposit = min(gold_to_deposit, available_space)
 
                 # If storage is full or no gold needs to be deposited, exit
-                if available_space <= 0 or gold_to_deposit <= 0:
+                if available_space <= 0:
                     if log:
-                        ConsoleLog("DepositGold", "No gold deposited (either storage full or not enough excess gold).", Console.MessageType.Warning)
+                        ConsoleLog("DepositGold", "No gold deposited, storage full.", Console.MessageType.Warning)
+                    return False
+                
+                if gold_to_deposit <= 0:
+                    if log:
+                        ConsoleLog("DepositGold", "No gold deposited, not enough excess gold.", Console.MessageType.Warning)
                     return False
 
                 # Perform the deposit
@@ -2276,7 +2394,7 @@ class Routines:
                 yield from Routines.Yield.wait(350)
                 
                 if log:
-                    ConsoleLog("DepositGold", f"Deposited {gold_to_deposit} gold. Remaining on character: {gold_amount_to_leave_on_character}.", Console.MessageType.Success)
+                    ConsoleLog("DepositGold", f"Deposited {gold_to_deposit} gold.", Console.MessageType.Success)
                 
                 return True
 
@@ -2289,13 +2407,25 @@ class Routines:
                     item_id = item_array.pop(0)
                     if item_id == 0:
                         continue
+                    
+                    if not Routines.Checks.Map.MapValid():
+                        item_array.clear()
+                        ActionQueueManager().ResetAllQueues()
+                        return
+                    
                     if not GLOBAL_CACHE.Agent.IsValid(item_id):
                         continue
+                    
                     item_x, item_y = GLOBAL_CACHE.Agent.GetXY(item_id)
                     yield from Routines.Yield.Movement.FollowPath([(item_x, item_y)])
+                    if not Routines.Checks.Map.MapValid():
+                        item_array.clear()
+                        ActionQueueManager().ResetAllQueues()
+                        return
                     if GLOBAL_CACHE.Agent.IsValid(item_id):
                         yield from Routines.Yield.Player.InteractAgent(item_id)
                         yield from Routines.Yield.wait(1250)
+                        
                     
                 if log and len(item_array) > 0:
                     ConsoleLog("LootItems", f"Looted {len(item_array)} items.", Console.MessageType.Info)

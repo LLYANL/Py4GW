@@ -66,6 +66,11 @@ class CustomSkillClass:
                 self.AlliesInRange = 0
                 self.AlliesInRangeArea = Range.Area.value
 
+                self.SpiritsInRange = 0
+                self.SpiritsInRangeArea = Range.Area.value
+                
+                self.MinionsInRange = 0
+                self.MinionsInRangeArea = Range.Area.value
 
     class CustomSkill:
         def __init__(self):
@@ -424,8 +429,8 @@ class CustomSkillClass:
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.Enemy.value
         skill.Nature = SkillNature.Offensive.value
-        skill.Conditions.EnemiesInRange = 2
-        skill.Conditions.EnemiesInRangeArea = Range.Adjacent.value
+        #skill.Conditions.EnemiesInRange = 2
+        #skill.Conditions.EnemiesInRangeArea = Range.Adjacent.value
         self.skill_data[skill.SkillID] = skill
 
         skill = self.CustomSkill()
@@ -2895,8 +2900,9 @@ class CustomSkillClass:
         skill = self.CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Purifying_Veil")
         skill.SkillType = SkillType.Enchantment.value
-        skill.TargetAllegiance = Skilltarget.Ally.value
+        skill.TargetAllegiance = Skilltarget.AllyMartial.value
         skill.Nature = SkillNature.Buff.value
+        skill.Conditions.TargetingStrict = True
         skill.Conditions.IsOutOfCombat = True
         self.skill_data[skill.SkillID] = skill
 
@@ -3250,9 +3256,10 @@ class CustomSkillClass:
         skill = self.CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Holy_Veil")
         skill.SkillType = SkillType.Enchantment.value
-        skill.TargetAllegiance = Skilltarget.Ally.value
-        skill.Nature = SkillNature.Hex_Removal.value
-        skill.Conditions.UniqueProperty = True
+        skill.TargetAllegiance = Skilltarget.AllyMartial.value
+        skill.Nature = SkillNature.Buff.value
+        skill.Conditions.TargetingStrict = True
+        skill.Conditions.IsOutOfCombat = True
         self.skill_data[skill.SkillID] = skill
 
         skill = self.CustomSkill()
@@ -9533,7 +9540,7 @@ class CustomSkillClass:
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.CustomC.value
         skill.Conditions.EnemiesInRange = 3
-        skill.Conditions.EnemiesInRangeArea = Range.Area.value
+        skill.Conditions.EnemiesInRangeArea = Range.Spellcast.value
         self.skill_data[skill.SkillID] = skill
 
         skill = self.CustomSkill()
@@ -10029,7 +10036,7 @@ class CustomSkillClass:
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Buff.value
         skill.Conditions.EnemiesInRange = 3
-        skill.Conditions.EnemiesInRangeArea = Range.Area.value
+        skill.Conditions.EnemiesInRangeArea = Range.Spellcast.value
         self.skill_data[skill.SkillID] = skill
         
         skill = self.CustomSkill()

@@ -1,11 +1,11 @@
 from operator import index
-from Py4GWCoreLib import GLOBAL_CACHE, IconsFontAwesome5, PyImGui, ImGui, Utils, Overlay, Range
+from Py4GWCoreLib import GLOBAL_CACHE, IconsFontAwesome5, PyImGui, ImGui, Utils, Overlay, Range, SharedCommandType, ConsoleLog, Color
+from Py4GWCoreLib import UIManager, ModelID, GLOBAL_CACHE
 
 from .constants import MAX_NUM_PLAYERS, NUMBER_OF_SKILLS
 from .types import SkillType, SkillNature, Skilltarget, GameOptionStruct
 from .globals import capture_mouse_timer, show_area_rings, show_hero_follow_grid, show_distance_on_followers, hero_formation, capture_hero_flag, capture_flag_all, capture_hero_index
 from .utils import IsHeroFlagged, DrawFlagAll, DrawHeroFlag, DistanceFromWaypoint
-from .candidates import SendPartyCommand
 
 from .cache_data import CacheData
 
@@ -235,36 +235,37 @@ def DrawFlaggingWindow(cached_data:CacheData):
         PyImGui.text("No Follower or Heroes to Flag.")
         return
 
-    if PyImGui.begin_table("Flags",3):
-        PyImGui.table_next_row()
-        PyImGui.table_next_column()
-        if party_size >= 2:
-            HeroFlags[0] = ImGui.toggle_button("1", IsHeroFlagged(cached_data,1), 30, 30)
-        PyImGui.table_next_column()
-        if party_size >= 3:
-            HeroFlags[1] = ImGui.toggle_button("2", IsHeroFlagged(cached_data,2),30,30)
-        PyImGui.table_next_column()
-        if party_size >= 4:
-            HeroFlags[2] = ImGui.toggle_button("3", IsHeroFlagged(cached_data,3),30,30)
-        PyImGui.table_next_row()
-        PyImGui.table_next_column()
-        if party_size >= 5:
-            HeroFlags[3] = ImGui.toggle_button("4", IsHeroFlagged(cached_data,4),30,30)
-        PyImGui.table_next_column()
-        AllFlag = ImGui.toggle_button("All", IsHeroFlagged(cached_data,0), 30, 30)
-        PyImGui.table_next_column()
-        if party_size >= 6:
-            HeroFlags[4] = ImGui.toggle_button("5", IsHeroFlagged(cached_data,5),30,30)
-        PyImGui.table_next_row()
-        PyImGui.table_next_column()
-        if party_size >= 7:
-            HeroFlags[5] = ImGui.toggle_button("6", IsHeroFlagged(cached_data,6),30,30)
-        PyImGui.table_next_column()
-        if party_size >= 8:
-            HeroFlags[6] = ImGui.toggle_button("7", IsHeroFlagged(cached_data,7), 30, 30)
-        PyImGui.table_next_column()
-        CLearFlags = ImGui.toggle_button("X", HeroFlags[7],30,30)
-        PyImGui.end_table()
+    if PyImGui.collapsing_header("Flagging"):
+        if PyImGui.begin_table("Flags",3):
+            PyImGui.table_next_row()
+            PyImGui.table_next_column()
+            if party_size >= 2:
+                HeroFlags[0] = ImGui.toggle_button("1", IsHeroFlagged(cached_data,1), 30, 30)
+            PyImGui.table_next_column()
+            if party_size >= 3:
+                HeroFlags[1] = ImGui.toggle_button("2", IsHeroFlagged(cached_data,2),30,30)
+            PyImGui.table_next_column()
+            if party_size >= 4:
+                HeroFlags[2] = ImGui.toggle_button("3", IsHeroFlagged(cached_data,3),30,30)
+            PyImGui.table_next_row()
+            PyImGui.table_next_column()
+            if party_size >= 5:
+                HeroFlags[3] = ImGui.toggle_button("4", IsHeroFlagged(cached_data,4),30,30)
+            PyImGui.table_next_column()
+            AllFlag = ImGui.toggle_button("All", IsHeroFlagged(cached_data,0), 30, 30)
+            PyImGui.table_next_column()
+            if party_size >= 6:
+                HeroFlags[4] = ImGui.toggle_button("5", IsHeroFlagged(cached_data,5),30,30)
+            PyImGui.table_next_row()
+            PyImGui.table_next_column()
+            if party_size >= 7:
+                HeroFlags[5] = ImGui.toggle_button("6", IsHeroFlagged(cached_data,6),30,30)
+            PyImGui.table_next_column()
+            if party_size >= 8:
+                HeroFlags[6] = ImGui.toggle_button("7", IsHeroFlagged(cached_data,7), 30, 30)
+            PyImGui.table_next_column()
+            CLearFlags = ImGui.toggle_button("X", HeroFlags[7],30,30)
+            PyImGui.end_table()
     
     if PyImGui.collapsing_header("Formation Flagger - Backline(1,2)"):
         set_formations_relative_to_leader = []
@@ -340,103 +341,56 @@ def DrawFlaggingWindow(cached_data:CacheData):
         
 
 def DrawCandidateWindow(cached_data:CacheData):
-    global MAX_NUM_PLAYERS
-
-    candidate_count = 0
-
+    def _OnSameMap(self_account, candidate):
+        if (candidate.MapID == self_account.MapID and
+            candidate.MapRegion == self_account.MapRegion and
+            candidate.MapDistrict == self_account.MapDistrict):
+            return True
+        return False
+    
+    def _OnSameParty(self_account, candidate):
+        if self_account.PartyID == candidate.PartyID:
+            return True
+        return False
+        
     table_flags = PyImGui.TableFlags.Sortable | PyImGui.TableFlags.Borders | PyImGui.TableFlags.RowBg
     if PyImGui.begin_table("CandidateTable", 2, table_flags):
         # Setup columns
-        PyImGui.table_setup_column("Invite", PyImGui.TableColumnFlags.NoSort)
+        PyImGui.table_setup_column("Command", PyImGui.TableColumnFlags.NoSort)
         PyImGui.table_setup_column("Candidate", PyImGui.TableColumnFlags.NoFlag)
         PyImGui.table_headers_row()
 
-        """
-        sort_specs = PyImGui.table_get_sort_specs()
-
-        column_index = 1  # Default to Candidate column
-        sort_direction = 1  # Default to Ascending
-
-        if sort_specs and sort_specs.SpecsCount > 0:
-            spec = sort_specs.Specs
-            column_index = spec.ColumnIndex
-            sort_direction = spec.SortDirection
-
-        sorted_candidates = cached_data.HeroAI_vars.all_candidate_struct[:]
-        if column_index == 1:  # Sort by Candidate Name
-            sorted_candidates.sort(
-                key=lambda x: Agent.GetName(x.PlayerID),
-                reverse=(sort_direction == 2)  # 2 = Descending
-            )
-        """
+        account_email = GLOBAL_CACHE.Player.GetAccountEmail()
+        self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(account_email)
+        if not self_account:
+            PyImGui.text("No account data found.")
+            PyImGui.end_table()
+            return
+        accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
         
-        for index in range(MAX_NUM_PLAYERS):
-            candidate = cached_data.HeroAI_vars.all_candidate_struct[index]
+        for account in accounts:
+            if account.AccountEmail == account_email:
+                continue
             
-            #if async_name_gettet_timer.HasElapsed(1000):
-            #    Agent.RequestName(candidate.PlayerID)
-               
-            
-            if (candidate.PlayerID and
-                candidate.PlayerID != cached_data.data.player_agent_id and
-                candidate.MapID == cached_data.data.map_id and
-                candidate.MapRegion == cached_data.data.region and
-                candidate.MapDistrict == cached_data.data.district):
-
-                candidate_count += 1
-
+            if _OnSameMap(self_account, account) and not _OnSameParty(self_account, account):
                 PyImGui.table_next_row()
-
-                PyImGui.table_set_column_index(0)
-                if PyImGui.button(f"Invite##invite_{candidate.PlayerID}"):
-                    SendPartyCommand(index, cached_data, "Invite")
-
-                PyImGui.table_set_column_index(1)
-                #name = Agent.GetName(candidate.PlayerID)
-
-                        
-                PyImGui.text(GLOBAL_CACHE.Agent.GetName(candidate.PlayerID)) 
-
+                PyImGui.table_next_column()
+                if PyImGui.button(f"Invite##invite_{account.PlayerID}"):
+                    GLOBAL_CACHE.Party.Players.InvitePlayer(account.CharacterName)
+                    GLOBAL_CACHE.ShMem.SendMessage(account_email, account.AccountEmail,SharedCommandType.InviteToParty, (self_account.PlayerID,0,0,0))
+                PyImGui.table_next_column()
+                PyImGui.text(f"{account.CharacterName}")
+            else:
+                if not _OnSameMap(self_account, account):
+                    PyImGui.table_next_row()
+                    PyImGui.table_next_column()
+                    if PyImGui.button(f"Summon##summon_{account.PlayerID}"):
+                        GLOBAL_CACHE.ShMem.SendMessage(account_email, account.AccountEmail,SharedCommandType.TravelToMap, (self_account.MapID,self_account.MapRegion,self_account.MapDistrict,0))
+                    PyImGui.table_next_column()
+                    PyImGui.text(f"{account.CharacterName}")
         PyImGui.end_table()
 
-        if candidate_count == 0:
-            PyImGui.text("No candidates found.")
-            
 
-    PyImGui.separator()
-
-    for index in range(MAX_NUM_PLAYERS):
-        candidate = cached_data.HeroAI_vars.all_candidate_struct[index]
-        if ((candidate.PlayerID and candidate.PlayerID != GLOBAL_CACHE.Player.GetAgentID()) and
-            (candidate.MapID != cached_data.data.map_id or
-            candidate.MapRegion != cached_data.data.region or
-            candidate.MapDistrict != cached_data.data.district)):
-
-            if PyImGui.button(f"Summon from map {GLOBAL_CACHE.Map.GetMapName(candidate.MapID)}##summon_{candidate.PlayerID}"):
-                SendPartyCommand(index, cached_data, "Summon")  
-
-
-def DrawCandidatesDebug(cached_data:CacheData):
-    global MAX_NUM_PLAYERS
-
-    candidate_count = 0     
-    headers = ["Slot","MapID", "MapRegion", "MapDistrict","PlayerID", "InvitedBy", "SummonedBy", "LastUpdated"]
-
-    data = []
-    for i in range(MAX_NUM_PLAYERS):
-        candidate = cached_data.HeroAI_vars.all_candidate_struct[i]
-        data.append((
-            i,  # Slot index
-            candidate.MapID,
-            candidate.MapRegion,
-            candidate.MapDistrict,
-            candidate.PlayerID,
-            candidate.InvitedBy,
-            candidate.SummonedBy,
-            candidate.LastUpdated
-        ))
-
-    ImGui.table("Candidate Debug Table", headers, data)
 
 slot_to_write = 0
 def DrawPlayersDebug(cached_data:CacheData):
@@ -642,11 +596,290 @@ def DrawOptions(cached_data:CacheData):
     #TODO Select combat engine options
 
 
+class ButtonColor:
+    def __init__(self, button_color:Color, hovered_color:Color, active_color:Color):
+        self.button_color = button_color
+        self.hovered_color = hovered_color
+        self.active_color = active_color
+      
+
+ButtonColors = {
+    "Resign": ButtonColor(button_color=Color(90,0,10,255), hovered_color=Color(160,0,15,255), active_color=Color(210,0,20,255)),  
+    "PixelStack": ButtonColor(button_color=Color(90,0,10,255), hovered_color=Color(160,0,15,255), active_color=Color(190,0,20,255)),
+    "Flag": ButtonColor(button_color=Color(90,0,10,255), hovered_color=Color(160,0,15,255), active_color=Color(190,0,20,255)),
+    "ClearFlags": ButtonColor(button_color=Color(90,0,10,255), hovered_color=Color(160,0,15,255), active_color=Color(190,0,20,255)),
+    "Celerity": ButtonColor(button_color = Color(129, 33, 188, 255), hovered_color = Color(165, 100, 200, 255), active_color = Color(135, 225, 230, 255)),  
+    "GrailOfMight": ButtonColor(button_color=Color(70,0,10,255), hovered_color=Color(160,0,15,255), active_color=Color(252,225,115,255)),
+    "ArmorOfSalvation": ButtonColor(button_color = Color(96, 60, 15, 255),hovered_color = Color(187, 149, 38, 255),active_color = Color(225, 150, 0, 255)),
+    "CandyCane": ButtonColor(button_color = Color(63, 91, 54, 255),hovered_color = Color(149, 72, 34, 255),active_color = Color(96, 172, 28, 255)),
+    "BirthdayCupcake": ButtonColor(button_color = Color(138, 54, 80, 255),hovered_color = Color(255, 186, 198, 255),active_color = Color(205, 94, 215, 255)),
+    "GoldenEgg": ButtonColor(button_color = Color(245, 227, 143, 255),hovered_color = Color(253, 248, 234, 255),active_color = Color(129, 82, 35, 255)),
+    "CandyCorn": ButtonColor(button_color = Color(239, 174, 33, 255),hovered_color = Color(206, 178, 148, 255),active_color = Color(239, 77, 16, 255)),
+    "CandyApple": ButtonColor(button_color = Color(75, 26, 28, 255),hovered_color = Color(202, 60, 88, 255),active_color = Color(179, 0, 39, 255)),
+    "PumpkinPie": ButtonColor(button_color = Color(224, 176, 126, 255),hovered_color = Color(226, 209, 210, 255),active_color = Color(129, 87, 54, 255)),
+    "DrakeKabob": ButtonColor(button_color = Color(28, 28, 28, 255),hovered_color = Color(190, 187, 184, 255),active_color = Color(94, 26, 13, 255)),
+    "SkalefinSoup": ButtonColor(button_color = Color(68, 85, 142, 255),hovered_color = Color(255, 255, 107, 255),active_color = Color(106, 139, 51, 255)),
+    "PahnaiSalad": ButtonColor(button_color = Color(113, 43, 25, 255),hovered_color = Color(185, 157, 90, 255),active_color = Color(137, 175, 10, 255)),
+    "WarSupplies": ButtonColor(button_color = Color(51, 26, 13, 255),hovered_color = Color(113, 43, 25, 255),active_color = Color(202, 115, 77, 255)),
+    "Alcohol": ButtonColor(button_color = Color(58, 41, 50, 255),hovered_color = Color(169, 145, 111, 255),active_color = Color(173, 173, 156, 255)),
+    "Blank": ButtonColor(button_color= Color(0, 0, 0, 0), hovered_color=Color(0, 0, 0, 0), active_color=Color(0, 0, 0, 0)),
+}
+
+show_confirm_dialog = False
+dialog_options = []
+target_id = 0
+
+
+
+def DrawMessagingOptions(cached_data:CacheData):
+    def _post_pcon_message(params):
+        self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(cached_data.account_email)
+        if not self_account:
+            return
+        accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+        sender_email = cached_data.account_email
+        for account in accounts:
+            ConsoleLog("Messaging", f"Sending Pcon Message to  {account.AccountEmail}")
+            
+            GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.PCon, params)
+
+    if ImGui.colored_button(f"{IconsFontAwesome5.ICON_TIMES}##commands_resign", ButtonColors["Resign"].button_color, ButtonColors["Resign"].hovered_color, ButtonColors["Resign"].active_color):
+    #if PyImGui.button(f"{IconsFontAwesome5.ICON_TIMES}##commands_resign"):
+        accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+        sender_email = cached_data.account_email
+        for account in accounts:
+            ConsoleLog("Messaging", "Resigning account: " + account.AccountEmail)
+            GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.Resign, (0,0,0,0))
+    ImGui.show_tooltip("Resign Party")
+    
+    PyImGui.same_line(0,-1)
+    PyImGui.text("|")
+    PyImGui.same_line(0,-1)
+
+    if PyImGui.button(f"{IconsFontAwesome5.ICON_COMPRESS_ARROWS_ALT}##commands_pixelstack"):
+        self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(cached_data.account_email)
+        if not self_account:
+            return
+        accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+        sender_email = cached_data.account_email
+        for account in accounts:
+            if self_account.AccountEmail == account.AccountEmail:
+                continue
+            ConsoleLog("Messaging", "Pixelstacking account: " + account.AccountEmail)
+            GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.PixelStack, (self_account.PlayerPosX,self_account.PlayerPosY,0,0))
+    ImGui.show_tooltip("Pixel Stack (Carto Helper)")
+    
+    PyImGui.same_line(0,-1)
+
+    if PyImGui.button(f"{IconsFontAwesome5.ICON_HAND_POINT_RIGHT}##commands_InteractTarget"):
+        target = GLOBAL_CACHE.Player.GetTargetID()
+        if target == 0:
+            ConsoleLog("Messaging", "No target to interact with.")
+            return
+        self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(cached_data.account_email)
+        if not self_account:
+            return
+        accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+        sender_email = cached_data.account_email
+        for account in accounts:
+            if self_account.AccountEmail == account.AccountEmail:
+                continue
+            ConsoleLog("Messaging", f"Ordering {account.AccountEmail} to interact with target: {target}")
+            GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.InteractWithTarget, (target,0,0,0))
+    ImGui.show_tooltip("Interact with Target")
+    PyImGui.same_line(0,-1)
+
+    if PyImGui.button(f"{IconsFontAwesome5.ICON_COMMENT_DOTS}##commands_takedialog"):
+        target = GLOBAL_CACHE.Player.GetTargetID()
+        if target == 0:
+            ConsoleLog("Messaging", "No target to interact with.")
+            return
+        if not UIManager.IsNPCDialogVisible():
+            ConsoleLog("Messaging", "No dialog is open.")
+            return
+        
+        # i need to display a modal dialog here to confirm options
+        options = UIManager.GetDialogButtonCount()
+        
+        self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(cached_data.account_email)
+        if not self_account:
+            return
+        accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+        sender_email = cached_data.account_email
+        for account in accounts:
+            if self_account.AccountEmail == account.AccountEmail:
+                continue
+            ConsoleLog("Messaging", f"Ordering {account.AccountEmail} to interact with target: {target}")
+            GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.InteractWithTarget, (target,1,0,0))
+    ImGui.show_tooltip("Get Dialog")
+    PyImGui.separator()
+    if PyImGui.collapsing_header("PCons"):
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["Celerity"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_GLOBE_ASIA}##commands_pcon_celerity", 
+                                ButtonColors["Celerity"].button_color, 
+                                ButtonColors["Celerity"].hovered_color, 
+                                ButtonColors["Celerity"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Essence_Of_Celerity.value, GLOBAL_CACHE.Skill.GetID("Essence_of_Celerity_item_effect"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Esence of Celerity")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["GrailOfMight"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_WINE_GLASS}##commands_pcon_grail_of_might", 
+                                ButtonColors["GrailOfMight"].button_color, 
+                                ButtonColors["GrailOfMight"].hovered_color, 
+                                ButtonColors["GrailOfMight"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Grail_Of_Might.value, GLOBAL_CACHE.Skill.GetID("Grail_of_Might_item_effect"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Grail of Might")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["ArmorOfSalvation"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_SPLOTCH}##commands_pcon_ArmorOfSalvation", 
+                                ButtonColors["ArmorOfSalvation"].button_color, 
+                                ButtonColors["ArmorOfSalvation"].hovered_color, 
+                                ButtonColors["ArmorOfSalvation"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Armor_Of_Salvation.value, GLOBAL_CACHE.Skill.GetID("Armor_of_Salvation_item_effect"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Armor of Salvation")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.text("|")
+        PyImGui.same_line(0,-1)
+        
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["CandyCane"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_CANDY_CANE}##commands_pcon_CandyCane", 
+                                ButtonColors["CandyCane"].button_color, 
+                                ButtonColors["CandyCane"].hovered_color, 
+                                ButtonColors["CandyCane"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Rainbow_Cc.value, 0, ModelID.Honeycomb.value, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Rainbow Candy Cane / Honeycomb")
+        PyImGui.separator()
+        
+
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["BirthdayCupcake"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_BIRTHDAY_CAKE}##commands_pcon_BirthdayCupcake", 
+                                ButtonColors["BirthdayCupcake"].button_color, 
+                                ButtonColors["BirthdayCupcake"].hovered_color, 
+                                ButtonColors["BirthdayCupcake"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Birthday_Cupcake.value, GLOBAL_CACHE.Skill.GetID("Birthday_Cupcake_skill"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Birthday Cupcake")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["GoldenEgg"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_EGG}##commands_pcon_GoldenEgg", 
+                                ButtonColors["GoldenEgg"].button_color, 
+                                ButtonColors["GoldenEgg"].hovered_color, 
+                                ButtonColors["GoldenEgg"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Golden_Egg.value, GLOBAL_CACHE.Skill.GetID("Golden_Egg_skill"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Golden Egg")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["CandyCorn"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_CARROT}##commands_pcon_CandyCorn", 
+                                ButtonColors["CandyCorn"].button_color, 
+                                ButtonColors["CandyCorn"].hovered_color, 
+                                ButtonColors["CandyCorn"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Candy_Corn.value, GLOBAL_CACHE.Skill.GetID("Candy_Corn_skill"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Candy Corn")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.text("|")
+        PyImGui.same_line(0,-1)
+        
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["Alcohol"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_WINE_BOTTLE}##commands_pcon_Alcohol", 
+                                ButtonColors["Alcohol"].button_color, 
+                                ButtonColors["Alcohol"].hovered_color, 
+                                ButtonColors["Alcohol"].active_color, 
+                                width=30, height=30):
+            pass
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Alcohol")
+        PyImGui.separator()
+        
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["CandyApple"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_APPLE_ALT}##commands_pcon_CandyApple", 
+                                ButtonColors["CandyApple"].button_color, 
+                                ButtonColors["CandyApple"].hovered_color, 
+                                ButtonColors["CandyApple"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Candy_Apple.value, GLOBAL_CACHE.Skill.GetID("Candy_Apple_skill"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Candy Apple")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["PumpkinPie"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_CHEESE}##commands_pcon_PumpkinPie", 
+                                ButtonColors["PumpkinPie"].button_color, 
+                                ButtonColors["PumpkinPie"].hovered_color, 
+                                ButtonColors["PumpkinPie"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Slice_Of_Pumpkin_Pie.value, GLOBAL_CACHE.Skill.GetID("Pie_Induced_Ecstasy"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Slice of Pumpkin Pie")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["DrakeKabob"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_SLASH}##commands_pcon_DrakeKabob", 
+                                ButtonColors["DrakeKabob"].button_color, 
+                                ButtonColors["DrakeKabob"].hovered_color, 
+                                ButtonColors["DrakeKabob"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Drake_Kabob.value, GLOBAL_CACHE.Skill.GetID("Drake_Skin"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Drake Kabob")
+
+        PyImGui.separator()
+        
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["SkalefinSoup"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_MORTAR_PESTLE}##commands_pcon_SkalefinSoup", 
+                                ButtonColors["SkalefinSoup"].button_color, 
+                                ButtonColors["SkalefinSoup"].hovered_color, 
+                                ButtonColors["SkalefinSoup"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Bowl_Of_Skalefin_Soup.value, GLOBAL_CACHE.Skill.GetID("Skale_Vigor"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Skalefin Soup")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["PahnaiSalad"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_RING}##commands_pcon_PahnaiSalad", 
+                                ButtonColors["PahnaiSalad"].button_color, 
+                                ButtonColors["PahnaiSalad"].hovered_color, 
+                                ButtonColors["PahnaiSalad"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.Pahnai_Salad.value, GLOBAL_CACHE.Skill.GetID("Pahnai_Salad_item_effect"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("Pahnai Salad")
+        
+        PyImGui.same_line(0,-1)
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Text, ButtonColors["WarSupplies"].active_color.to_tuple_normalized())
+        if ImGui.colored_button(f"{IconsFontAwesome5.ICON_TOOLBOX}##commands_pcon_WarSupplies", 
+                                ButtonColors["WarSupplies"].button_color, 
+                                ButtonColors["WarSupplies"].hovered_color, 
+                                ButtonColors["WarSupplies"].active_color, 
+                                width=30, height=30):
+            _post_pcon_message((ModelID.War_Supplies.value, GLOBAL_CACHE.Skill.GetID("Well_Supplied"), 0, 0))
+        PyImGui.pop_style_color(1)
+        ImGui.show_tooltip("War Supplies")
+    
+    
+
 def DrawDebugWindow(cached_data:CacheData):
     global MAX_NUM_PLAYERS
 
-    if PyImGui.collapsing_header("Candidates Debug"):
-        DrawCandidatesDebug(cached_data)
     if PyImGui.collapsing_header("Players Debug"):
         DrawPlayersDebug(cached_data)
     if PyImGui.collapsing_header("Game Options Debug"):
@@ -688,65 +921,121 @@ def DrawMultiboxTools(cached_data:CacheData):
 
 
 
-def CompareAndSubmitGameOptions(cached_data:CacheData, game_option: GameOptionStruct):
+def CompareAndSubmitGameOptions(cached_data:CacheData, game_option: GameOptionStruct):   
     global MAX_NUM_PLAYERS
     # Core Options
+    accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+    if not accounts:
+        ConsoleLog("HeroAI", "No accounts found in shared memory.")
+        return
+    
     if game_option.Following != cached_data.HeroAI_vars.global_control_game_struct.Following:
         cached_data.HeroAI_vars.global_control_game_struct.Following = game_option.Following
-        for i in range(MAX_NUM_PLAYERS):
-            cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(i, "Following", game_option.Following)
+        for account in accounts:
+            account_email = account.AccountEmail
+            hero_ai_data = GLOBAL_CACHE.ShMem.GetHeroAIOptions(account_email)
+            if hero_ai_data is None:
+                ConsoleLog("HeroAI", f"Failed to get HeroAI options for {account_email} from shared memory.")
+                continue
+            
+            hero_ai_data.Following = game_option.Following
+
 
     if game_option.Avoidance != cached_data.HeroAI_vars.global_control_game_struct.Avoidance:
         cached_data.HeroAI_vars.global_control_game_struct.Avoidance = game_option.Avoidance
-        for i in range(MAX_NUM_PLAYERS):
-            cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(i, "Avoidance", game_option.Avoidance)
+        for account in accounts:
+            account_email = account.AccountEmail
+            hero_ai_data = GLOBAL_CACHE.ShMem.GetHeroAIOptions(account_email)
+            if hero_ai_data is None:
+                ConsoleLog("HeroAI", f"Failed to get HeroAI options for {account_email} from shared memory.")
+                continue
+            
+            hero_ai_data.Avoidance = game_option.Avoidance
 
     if game_option.Looting != cached_data.HeroAI_vars.global_control_game_struct.Looting:
         cached_data.HeroAI_vars.global_control_game_struct.Looting = game_option.Looting
-        for i in range(MAX_NUM_PLAYERS):
-            cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(i, "Looting", game_option.Looting)
+        for account in accounts:
+            account_email = account.AccountEmail
+            hero_ai_data = GLOBAL_CACHE.ShMem.GetHeroAIOptions(account_email)
+            if hero_ai_data is None:
+                ConsoleLog("HeroAI", f"Failed to get HeroAI options for {account_email} from shared memory.")
+                continue
+            
+            hero_ai_data.Looting = game_option.Looting
 
     if game_option.Targeting != cached_data.HeroAI_vars.global_control_game_struct.Targeting:
         cached_data.HeroAI_vars.global_control_game_struct.Targeting = game_option.Targeting
-        for i in range(MAX_NUM_PLAYERS):
-            cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(i, "Targeting", game_option.Targeting)
+        for account in accounts:
+            account_email = account.AccountEmail
+            hero_ai_data = GLOBAL_CACHE.ShMem.GetHeroAIOptions(account_email)
+            if hero_ai_data is None:
+                ConsoleLog("HeroAI", f"Failed to get HeroAI options for {account_email} from shared memory.")
+                continue
+            
+            hero_ai_data.Targeting = game_option.Targeting
 
     if game_option.Combat != cached_data.HeroAI_vars.global_control_game_struct.Combat:
         cached_data.HeroAI_vars.global_control_game_struct.Combat = game_option.Combat
-        for i in range(MAX_NUM_PLAYERS):
-            cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(i, "Combat", game_option.Combat)
+        for account in accounts:
+            account_email = account.AccountEmail
+            hero_ai_data = GLOBAL_CACHE.ShMem.GetHeroAIOptions(account_email)
+            if hero_ai_data is None:
+                ConsoleLog("HeroAI", f"Failed to get HeroAI options for {account_email} from shared memory.")
+                continue
+            
+            hero_ai_data.Combat = game_option.Combat
 
     # Skills
     for skill_index in range(NUMBER_OF_SKILLS):
         if game_option.Skills[skill_index].Active != cached_data.HeroAI_vars.global_control_game_struct.Skills[skill_index].Active:
             cached_data.HeroAI_vars.global_control_game_struct.Skills[skill_index].Active = game_option.Skills[skill_index].Active
-            for i in range(MAX_NUM_PLAYERS):
-                cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(
-                    i, f"Skill_{skill_index + 1}", game_option.Skills[skill_index].Active
-                )
+            for account in accounts:
+                account_email = account.AccountEmail
+                hero_ai_data = GLOBAL_CACHE.ShMem.GetHeroAIOptions(account_email)
+                if hero_ai_data is None:
+                    ConsoleLog("HeroAI", f"Failed to get HeroAI options for {account_email} from shared memory.")
+                    continue
+                
+                hero_ai_data.Skills[skill_index] = game_option.Skills[skill_index].Active
 
 
-def SubmitGameOptions(cached_data:CacheData,index,game_option,original_game_option):
+def SubmitGameOptions(cached_data:CacheData,party_pos,game_option,original_game_option):
     # Core Options
+    hero_ai_data = GLOBAL_CACHE.ShMem.GetGerHeroAIOptionsByPartyNumber(party_pos)
+    if hero_ai_data is None:
+        ConsoleLog("HeroAI", "Failed to get HeroAI options from shared memory.")
+        return
     if game_option.Following != original_game_option.Following:
-        cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Following", game_option.Following)
+        hero_ai_data.Following = game_option.Following
+        ConsoleLog("HeroAI", f"Following set to {game_option.Following} for party {party_pos}")
+        #cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Following", game_option.Following)
 
     if game_option.Avoidance != original_game_option.Avoidance:
-        cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Avoidance", game_option.Avoidance)
+        hero_ai_data.Avoidance = game_option.Avoidance
+        ConsoleLog("HeroAI", f"Avoidance set to {game_option.Avoidance} for party {party_pos}")
+        #cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Avoidance", game_option.Avoidance)
 
     if game_option.Looting != original_game_option.Looting:
-        cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Looting", game_option.Looting)
+        hero_ai_data.Looting = game_option.Looting
+        ConsoleLog("HeroAI", f"Looting set to {game_option.Looting} for party {party_pos}")
+        #cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Looting", game_option.Looting)
 
     if game_option.Targeting != original_game_option.Targeting:
-        cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Targeting", game_option.Targeting)
+        hero_ai_data.Targeting = game_option.Targeting
+        ConsoleLog("HeroAI", f"Targeting set to {game_option.Targeting} for party {party_pos}")
+        #cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Targeting", game_option.Targeting)
 
     if game_option.Combat != original_game_option.Combat:
-        cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Combat", game_option.Combat)
+        hero_ai_data.Combat = game_option.Combat
+        ConsoleLog("HeroAI", f"Combat set to {game_option.Combat} for party {party_pos}")
+        #cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, "Combat", game_option.Combat)
 
     # Skills
     for i in range(NUMBER_OF_SKILLS):
         if game_option.Skills[i].Active != original_game_option.Skills[i].Active:
-            cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, f"Skill_{i + 1}", game_option.Skills[i].Active)
+            hero_ai_data.Skills[i] = game_option.Skills[i].Active
+            ConsoleLog("HeroAI", f"Skill {i + 1} set to {game_option.Skills[i].Active} for party {party_pos}")
+            #cached_data.HeroAI_vars.shared_memory_handler.set_game_option_property(index, f"Skill_{i + 1}", game_option.Skills[i].Active)
 
 def DrawPanelButtons(source_game_option):
     game_option = GameOptionStruct()
@@ -818,8 +1107,9 @@ def DrawControlPanelWindow(cached_data:CacheData):
                     login_number = GLOBAL_CACHE.Party.Players.GetLoginNumberByAgentID(cached_data.HeroAI_vars.all_player_struct[index].PlayerID)
                     player_name = GLOBAL_CACHE.Party.Players.GetPlayerNameByLoginNumber(login_number)
                     if PyImGui.tree_node(f"{player_name}##ControlPlayer{index}"):
-                        game_option = DrawPanelButtons(original_game_option)
-                        SubmitGameOptions(cached_data, index, game_option, original_game_option)
+                        game_option2 = DrawPanelButtons(original_game_option)
+                        ConsoleLog("HeroAI", f"Submitting game options for player {player_name} at index {index}")
+                        SubmitGameOptions(cached_data, index, game_option2, original_game_option)
                         PyImGui.tree_pop()
 
         cached_data.HeroAI_windows.control_window.process_window()

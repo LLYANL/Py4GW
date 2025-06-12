@@ -546,7 +546,7 @@ class CombatClass:
 
         """ Check if the skill is a resurrection skill and the target is dead """
         if self.skills[slot].custom_skill_data.Nature == SkillNature.Resurrection.value:
-            return True if not GLOBAL_CACHE.Agent.IsAlive(vTarget) else False
+            return True if GLOBAL_CACHE.Agent.IsDead(vTarget) else False
 
 
         if self.skills[slot].custom_skill_data.Conditions.UniqueProperty:
@@ -635,7 +635,7 @@ class CombatClass:
                 self.skills[slot].skill_id == self.heal_as_one
                 ):
                 LessLife = GLOBAL_CACHE.Agent.GetHealth(vTarget) < Conditions.LessLife
-                dead = not GLOBAL_CACHE.Agent.IsAlive(vTarget)
+                dead = GLOBAL_CACHE.Agent.IsDead(vTarget)
                 return LessLife or dead
                 
 
@@ -671,6 +671,8 @@ class CombatClass:
         feature_count += (1 if Conditions.RequiresSpiritInEarshot else 0)
         feature_count += (1 if Conditions.EnemiesInRange > 0 else 0)
         feature_count += (1 if Conditions.AlliesInRange > 0 else 0)
+        feature_count += (1 if Conditions.SpiritsInRange > 0 else 0)
+        feature_count += (1 if Conditions.MinionsInRange > 0 else 0)
 
         if Conditions.IsAlive:
             if GLOBAL_CACHE.Agent.IsAlive(vTarget):
@@ -701,6 +703,7 @@ class CombatClass:
                 is_poison or 
                 is_weakness):
                 number_of_features += 1
+
 
         if Conditions.HasBleeding:
             if is_bleeding:
@@ -871,7 +874,7 @@ class CombatClass:
                     
         if self.skills[slot].custom_skill_data.SkillType == SkillType.PetAttack.value:
             pet_id = GLOBAL_CACHE.Party.Pets.GetPetID(GLOBAL_CACHE.Player.GetAgentID())
-            if not GLOBAL_CACHE.Agent.IsAlive(pet_id):
+            if GLOBAL_CACHE.Agent.IsDead(pet_id):
                 return False
             
             pet_attack_list = [GLOBAL_CACHE.Skill.GetID("Bestial_Mauling"),
@@ -910,6 +913,23 @@ class CombatClass:
                 number_of_features += 1
             else:
                 number_of_features = 0
+                
+        if Conditions.SpiritsInRange != 0:
+            player_pos = GLOBAL_CACHE.Player.GetXY()
+            ally_array = ally_array = Routines.Agents.GetFilteredSpiritArray(player_pos[0], player_pos[1], Conditions.SpiritsInRangeArea)
+            if len(ally_array) >= Conditions.SpiritsInRange:
+                number_of_features += 1
+            else:
+                number_of_features = 0
+                
+        if Conditions.MinionsInRange != 0:
+            player_pos = GLOBAL_CACHE.Player.GetXY()
+            ally_array = ally_array = Routines.Agents.GetFilteredMinionArray(player_pos[0], player_pos[1], Conditions.MinionsInRangeArea)
+            if len(ally_array) >= Conditions.MinionsInRange:
+                number_of_features += 1
+            else:
+                number_of_features = 0
+            
 
         #Py4GW.Console.Log("AreCastConditionsMet", f"feature count: {feature_count}, No of features {number_of_features}", Py4GW.Console.MessageType.Info)
         
@@ -1060,22 +1080,6 @@ class CombatClass:
         if nearest != 0:
             self.SafeInteract(nearest)
             return True
-        
-        """
-        target_id = GLOBAL_CACHE.Player.GetTargetID()
-        if target_id == 0:
-            nearest = Routines.Agents.GetNearestEnemy(self.get_combat_distance())
-            if nearest != 0:
-                self.SafeInteract(nearest)
-                return True
-        
-        _, target_aliegance = GLOBAL_CACHE.Agent.GetAllegiance(target_id)
-        if not GLOBAL_CACHE.Agent.IsDead(target_id) and target_aliegance == 'Enemy':
-            if target_id != 0:
-                
-                self.SafeInteract(target_id)
-                return True
-        """
         
         
         

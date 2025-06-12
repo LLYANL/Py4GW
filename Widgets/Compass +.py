@@ -48,7 +48,6 @@ class Compass():
     reset      = True
     player_id  = 0
     target_id  = 0
-    target_id_timer = ThrottledTimer(100)
     geometry   = []
     primitives_set = False
     map_bounds = []
@@ -175,10 +174,6 @@ class Compass():
             self.death_alpha_mod = .33
             self.spirit_alpha = 50
             self.show_spirit_range = False
-
-            self.eoe          = Utils.RGBToColor(  0, 255,   0,  50)
-            self.qz           = Utils.RGBToColor(  0,   0, 255,  50)
-            self.winnowing    = Utils.RGBToColor(  0, 255 ,255,  50)
 
             # range rings
             self.AddRangeRing('Touch',      False, Range.Touch.value,     Utils.RGBToColor(255, 255 , 255,   0), Utils.RGBToColor(255, 255 , 255, 255), 1.5)
@@ -348,7 +343,8 @@ class Compass():
                                                                                              self.position.current_size, self.position.rotation)
         
         if not self.primitives_set:
-            self.renderer.set_primitives(self.geometry, self.pathing.color)
+            color = Utils.ColorToTuple(self.pathing.color)
+            self.renderer.set_primitives(self.geometry, Utils.RGBToDXColor(int(color[0]*255), int(color[1]*255), int(color[2]*255), int(color[3]*255)))
             self.primitives_set = True
 
         self.renderer.world_space.set_zoom(zoom)
@@ -370,7 +366,7 @@ class Compass():
 
         if not is_alive:
             col = Utils.ColorToTuple(color)
-            color = Color(int(col[0]*255), int(col[1]*255), int(col[2]*255), 100).to_color()
+            color = Color(int(col[0]*255), int(col[1]*255), int(col[2]*255), int(col[3]*255)).shift(Color(0,0,0,255), .4).to_color()
 
         x, y = Map.MiniMap.MapProjection.GamePosToScreen(x, y, *self.position.player_pos,
                                                                 self.position.current_pos.x, self.position.current_pos.y,
@@ -386,51 +382,31 @@ class Compass():
             self.imgui.draw_list_add_circle_filled(x, y, size, color, 12)
             self.imgui.draw_list_add_circle(x, y, size, line_col, 12, line_thickness)
         elif shape == 'Star':
-            scale = 1.6
+            scale = 1.2
 
-            x1 = math.cos(math.radians( 30))*scale*size + x
-            y1 = math.sin(math.radians( 30))*scale*size + y
-            x2 = math.cos(math.radians(150))*scale*size + x
-            y2 = math.sin(math.radians(150))*scale*size + y
-            x3 = math.cos(math.radians(270))*scale*size + x
-            y3 = math.sin(math.radians(270))*scale*size + y
+            x1 = math.cos(math.radians(  0) + rotation)*scale*size + x
+            y1 = math.sin(math.radians(  0) + rotation)*scale*size + y
+            x2 = math.cos(math.radians( 90) + rotation)*scale*size + x
+            y2 = math.sin(math.radians( 90) + rotation)*scale*size + y
+            x3 = math.cos(math.radians(180) + rotation)*scale*size + x
+            y3 = math.sin(math.radians(180) + rotation)*scale*size + y
+            x4 = math.cos(math.radians(270) + rotation)*scale*size + x
+            y4 = math.sin(math.radians(270) + rotation)*scale*size + y
 
-            x4 = math.cos(math.radians( 90))*scale*size + x
-            y4 = math.sin(math.radians( 90))*scale*size + y
-            x5 = math.cos(math.radians(210))*scale*size + x
-            y5 = math.sin(math.radians(210))*scale*size + y
-            x6 = math.cos(math.radians(330))*scale*size + x
-            y6 = math.sin(math.radians(330))*scale*size + y
+            a1 = math.cos(math.radians( 45) + rotation)*scale*size + x
+            b1 = math.sin(math.radians( 45) + rotation)*scale*size + y
+            a2 = math.cos(math.radians(135) + rotation)*scale*size + x
+            b2 = math.sin(math.radians(135) + rotation)*scale*size + y
+            a3 = math.cos(math.radians(225) + rotation)*scale*size + x
+            b3 = math.sin(math.radians(225) + rotation)*scale*size + y
+            a4 = math.cos(math.radians(315) + rotation)*scale*size + x
+            b4 = math.sin(math.radians(315) + rotation)*scale*size + y
 
-            a1 = math.cos(math.radians( 60))*scale/1.85*size + x
-            b1 = math.sin(math.radians( 60))*scale/1.85*size + y
-            a2 = math.cos(math.radians(180))*scale/1.85*size + x
-            b2 = math.sin(math.radians(180))*scale/1.85*size + y
-            a3 = math.cos(math.radians(300))*scale/1.85*size + x
-            b3 = math.sin(math.radians(300))*scale/1.85*size + y
-
-            a4 = math.cos(math.radians(120))*scale/1.85*size + x
-            b4 = math.sin(math.radians(120))*scale/1.85*size + y
-            a5 = math.cos(math.radians(240))*scale/1.85*size + x
-            b5 = math.sin(math.radians(240))*scale/1.85*size + y
-            a6 = math.cos(math.radians(  0))*scale/1.85*size + x
-            b6 = math.sin(math.radians(  0))*scale/1.85*size + y
-
-            self.imgui.draw_list_add_triangle_filled(x1, y1, x2, y2, x3, y3, color)
-            self.imgui.draw_list_add_triangle_filled(x4, y4, x5, y5, x6, y6, color)
-
-            self.imgui.draw_list_add_line(x1, y1, a1, b1, line_col, line_thickness)
-            self.imgui.draw_list_add_line(a1, b1, x4, y4, line_col, line_thickness)
-            self.imgui.draw_list_add_line(x4, y4, a4, b4, line_col, line_thickness)
-            self.imgui.draw_list_add_line(a4, b4, x2, y2, line_col, line_thickness)
-            self.imgui.draw_list_add_line(x2, y2, a2, b2, line_col, line_thickness)
-            self.imgui.draw_list_add_line(a2, b2, x5, y5, line_col, line_thickness)
-            self.imgui.draw_list_add_line(x5, y5, a5, b5, line_col, line_thickness)
-            self.imgui.draw_list_add_line(a5, b5, x3, y3, line_col, line_thickness)
-            self.imgui.draw_list_add_line(x3, y3, a3, b3, line_col, line_thickness)
-            self.imgui.draw_list_add_line(a3, b3, x6, y6, line_col, line_thickness)
-            self.imgui.draw_list_add_line(x6, y6, a6, b6, line_col, line_thickness)
-            self.imgui.draw_list_add_line(a6, b6, x1, y1, line_col, line_thickness)
+            
+            self.imgui.draw_list_add_quad(x1, y1, x2, y2, x3, y3, x4, y4, line_col, 2*line_thickness)
+            self.imgui.draw_list_add_quad(a1, b1, a2, b2, a3, b3, a4, b4, line_col, 2*line_thickness)
+            self.imgui.draw_list_add_quad_filled(x1, y1, x2, y2, x3, y3, x4, y4, color)
+            self.imgui.draw_list_add_quad_filled(a1, b1, a2, b2, a3, b3, a4, b4, color)
         else:
             scale = [1,1,1,1]
             if shape == 'Tear':
@@ -438,14 +414,14 @@ class Compass():
             elif shape == 'Square':
                 scale = [1,1,1,1]
             
-            x1 = math.cos(rotation                    )*scale[0]*size + x
-            y1 = math.sin(rotation                    )*scale[0]*size + y
-            x2 = math.cos(rotation + math.radians( 90))*scale[1]*size + x
-            y2 = math.sin(rotation + math.radians( 90))*scale[1]*size + y
-            x3 = math.cos(rotation + math.radians(180))*scale[2]*size + x
-            y3 = math.sin(rotation + math.radians(180))*scale[2]*size + y
-            x4 = math.cos(rotation + math.radians(270))*scale[3]*size + x
-            y4 = math.sin(rotation + math.radians(270))*scale[3]*size + y
+            x1 = math.cos(                    rotation)*scale[0]*size + x
+            y1 = math.sin(                    rotation)*scale[0]*size + y
+            x2 = math.cos(math.radians( 90) + rotation)*scale[1]*size + x
+            y2 = math.sin(math.radians( 90) + rotation)*scale[1]*size + y
+            x3 = math.cos(math.radians(180) + rotation)*scale[2]*size + x
+            y3 = math.sin(math.radians(180) + rotation)*scale[2]*size + y
+            x4 = math.cos(math.radians(270) + rotation)*scale[3]*size + x
+            y4 = math.sin(math.radians(270) + rotation)*scale[3]*size + y
 
             self.imgui.draw_list_add_quad_filled(x1, y1, x2, y2, x3, y3, x4, y4, color)
             self.imgui.draw_list_add_quad(x1, y1, x2, y2, x3, y3, x4, y4, line_col, line_thickness)
@@ -459,6 +435,59 @@ class Compass():
         def GetAgentParams(agent):
             return self.position.rotation - agent.rotation_angle, agent.id == self.target_id, agent.living_agent.is_alive
         
+        def GetSpiritParams(model_id):
+            fill_color = None
+
+            if model_id in self.config.spirits_ranger:
+                if self.config.show_spirit_range:
+                    color = Utils.ColorToTuple(self.config.markers['Spirit (Ranger)'].color)
+                    fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
+
+                return (self.config.markers['Spirit (Ranger)'].visible, 
+                        self.config.markers['Spirit (Ranger)'].size, self.config.markers['Spirit (Ranger)'].shape, 
+                        self.config.markers['Spirit (Ranger)'].color, Range.Spirit.value, fill_color)
+            
+            elif model_id in self.config.spirits_vanguard:
+                if self.config.show_spirit_range:
+                    color = Utils.ColorToTuple(self.config.markers['Spirit (Vanguard)'].color)
+                    fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
+
+                return (self.config.markers['Spirit (Vanguard)'].visible, 
+                        self.config.markers['Spirit (Vanguard)'].size, self.config.markers['Spirit (Vanguard)'].shape, 
+                        self.config.markers['Spirit (Vanguard)'].color, Range.Spirit.value, fill_color)
+
+            else:
+                is_rit_spirit = False
+                shape = 'Circle'
+                range = Range.Spirit.value
+
+                if self.config.show_spirit_range:
+                    color = Utils.ColorToTuple(self.config.markers['Spirit (Ritualist)'].color)
+                    fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
+
+                if model_id in self.config.spirits_ritualist['spirit']:
+                    is_rit_spirit = True
+
+                elif model_id in self.config.spirits_ritualist['longbow']:
+                    is_rit_spirit = True
+                    shape = self.config.markers['Spirit (Ritualist)'].shape
+                    range = 1350
+
+                elif model_id in self.config.spirits_ritualist['earshot']:
+                    is_rit_spirit = True
+                    range = Range.Earshot.value
+
+                elif model_id in self.config.spirits_ritualist['area']:
+                    is_rit_spirit = True
+                    range = Range.Area.value
+
+                if is_rit_spirit:
+                    return (self.config.markers['Spirit (Ritualist)'].visible, 
+                            self.config.markers['Spirit (Ritualist)'].size, shape, 
+                            self.config.markers['Spirit (Ritualist)'].color, range, fill_color)
+                
+            return (False, None, None, None, None, None)
+        
         def CheckCustomMarkers(agent):
             model_id = agent.living_agent.player_number
             for marker in self.config.custom_markers.values():
@@ -469,7 +498,7 @@ class Compass():
                         fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
                     else:
                         fill_color = None
-                    self.DrawAgent(marker.visible, marker.size, marker.shape, marker.color, marker.fill_range, fill_color, agent.x, agent.y, rot, is_alive, is_target) # type: ignore
+                    self.DrawAgent(marker.visible, marker.size, marker.shape, marker.color, marker.fill_range, fill_color, agent.x, agent.y, rot, is_alive, is_target)
                     return True
             return False
 
@@ -477,6 +506,12 @@ class Compass():
         player_agent = None
         self.player_id = GLOBAL_CACHE.Player.GetAgentID()
         self.target_id = GLOBAL_CACHE.Player.GetTargetID()
+
+        for agent in agent_array.GetRawGadgetArray():
+            if not GetAgentValid(agent): continue
+            rot, is_target, _ = GetAgentParams(agent)
+
+            self.DrawAgent(*self.config.markers['Signpost'].values(), agent.x, agent.y, rot, True, is_target) # type: ignore
 
         for agent in agent_array.GetRawSpiritPetArray():
             if not GetAgentValid(agent): continue
@@ -486,67 +521,11 @@ class Compass():
             if agent.living_agent.is_spawned:
                 if not is_alive:
                     continue
+
                 model_id = agent.living_agent.player_number
-                if model_id in self.config.spirits_ranger:
-                    if self.config.show_spirit_range:
-                        color = Utils.ColorToTuple(self.config.markers['Spirit (Ranger)'].color)
-                        fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
-                    else:
-                        fill_color = None
-                    self.DrawAgent(self.config.markers['Spirit (Ranger)'].visible, self.config.markers['Spirit (Ranger)'].size, 
-                                   self.config.markers['Spirit (Ranger)'].shape, self.config.markers['Spirit (Ranger)'].color, 
-                                   Range.Spirit.value, fill_color, 
-                                   agent.x, agent.y, rot, is_alive, is_target)
-                elif model_id in self.config.spirits_ritualist['spirit']:
-                    if self.config.show_spirit_range:
-                        color = Utils.ColorToTuple(self.config.markers['Spirit (Ritualist)'].color)
-                        fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
-                    else:
-                        fill_color = None
-                    self.DrawAgent(self.config.markers['Spirit (Ritualist)'].visible, self.config.markers['Spirit (Ritualist)'].size, 
-                                   'Circle', self.config.markers['Spirit (Ritualist)'].color, 
-                                   Range.Spirit.value, fill_color, 
-                                   agent.x, agent.y, rot, is_alive, is_target)
-                elif model_id in self.config.spirits_ritualist['longbow']:
-                    if self.config.show_spirit_range:
-                        color = Utils.ColorToTuple(self.config.markers['Spirit (Ritualist)'].color)
-                        fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
-                    else:
-                        fill_color = None
-                    self.DrawAgent(self.config.markers['Spirit (Ritualist)'].visible, self.config.markers['Spirit (Ritualist)'].size, 
-                                   self.config.markers['Spirit (Ritualist)'].shape, self.config.markers['Spirit (Ritualist)'].color, 
-                                   1350, fill_color, 
-                                   agent.x, agent.y, rot, is_alive, is_target)
-                elif model_id in self.config.spirits_ritualist['earshot']:
-                    if self.config.show_spirit_range:
-                        color = Utils.ColorToTuple(self.config.markers['Spirit (Ritualist)'].color)
-                        fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
-                    else:
-                        fill_color = None
-                    self.DrawAgent(self.config.markers['Spirit (Ritualist)'].visible, self.config.markers['Spirit (Ritualist)'].size, 
-                                   'Circle', self.config.markers['Spirit (Ritualist)'].color, 
-                                   Range.Earshot.value, fill_color, 
-                                   agent.x, agent.y, rot, is_alive, is_target)
-                elif model_id in self.config.spirits_ritualist['area']:
-                    if self.config.show_spirit_range:
-                        color = Utils.ColorToTuple(self.config.markers['Spirit (Ritualist)'].color)
-                        fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
-                    else:
-                        fill_color = None
-                    self.DrawAgent(self.config.markers['Spirit (Ritualist)'].visible, self.config.markers['Spirit (Ritualist)'].size, 
-                                   'Circle', self.config.markers['Spirit (Ritualist)'].color, 
-                                   Range.Area.value, fill_color, 
-                                   agent.x, agent.y, rot, is_alive, is_target)
-                elif model_id in self.config.spirits_vanguard:
-                    if self.config.show_spirit_range:
-                        color = Utils.ColorToTuple(self.config.markers['Spirit (Vanguard)'].color)
-                        fill_color = Utils.TupleToColor((color[0],color[1],color[2],self.config.spirit_alpha/255))
-                    else:
-                        fill_color = None
-                    self.DrawAgent(self.config.markers['Spirit (Vanguard)'].visible, self.config.markers['Spirit (Vanguard)'].size, 
-                                   self.config.markers['Spirit (Vanguard)'].shape, self.config.markers['Spirit (Vanguard)'].color, 
-                                   Range.Spirit.value, fill_color, 
-                                   agent.x, agent.y, rot, is_alive, is_target)
+                spirit_params = GetSpiritParams(model_id)
+
+                self.DrawAgent(*spirit_params, agent.x, agent.y, rot, is_alive, is_target) # type: ignore
             else:
                 self.DrawAgent(*self.config.markers['Ally (Pet)'].values(), agent.x, agent.y, rot, is_alive, is_target) # type: ignore
 
@@ -572,6 +551,14 @@ class Compass():
             if agent.living_agent.has_boss_glow:
                 self.DrawAgent(self.config.markers['Enemy'].visible, self.config.markers['Enemy'].size*1.2, self.config.markers['Enemy'].shape, self.config.profession[agent.living_agent.profession.ToInt()],
                                             self.config.markers['Enemy'].fill_range, self.config.markers['Enemy'].fill_color, agent.x, agent.y, rot, is_alive, is_target)
+            elif agent.living_agent.is_spawned:
+                if not is_alive:
+                    continue
+
+                model_id = agent.living_agent.player_number
+                visible, size, shape, _, range, fill_color = GetSpiritParams(model_id)
+
+                self.DrawAgent(visible, size, shape, self.config.markers['Enemy'].color, range, fill_color, agent.x, agent.y, rot, is_alive, is_target)
             else:
                 self.DrawAgent(*self.config.markers['Enemy'].values(), agent.x, agent.y, rot, is_alive, is_target) # type: ignore
 
@@ -600,20 +587,14 @@ class Compass():
             else:
                 self.DrawAgent(*self.config.markers['Minipet'].values(), agent.x, agent.y, rot, is_alive, is_target) # type: ignore
 
-        if player_agent and player_agent.id and Utils.Distance((player_agent.x, player_agent.y), self.position.player_pos) <= self.position.culling:
+        if player_agent and GetAgentValid(player_agent):
             rot, is_target, is_alive = GetAgentParams(player_agent)
 
             self.DrawAgent(*self.config.markers['Player'].values(), player_agent.x, player_agent.y, rot, is_alive, is_target) # type: ignore
 
-        for agent in agent_array.GetRawGadgetArray():
-            if not GetAgentValid(agent): continue
-            rot, is_target, is_alive = GetAgentParams(agent)
-
-            self.DrawAgent(*self.config.markers['Signpost'].values(), agent.x, agent.y, rot, is_alive, is_target) # type: ignore
-
         for agent in agent_array.GetRawItemArray():
             if not GetAgentValid(agent): continue
-            rot, is_target, is_alive = GetAgentParams(agent)
+            rot, is_target, _ = GetAgentParams(agent)
 
             match Item.item_instance(agent.item_agent.item_id).rarity.value:
                 case 1:
@@ -706,7 +687,7 @@ class Compass():
             self.reset = True
             return
 
-        if Map.IsMapReady() and Party.IsPartyLoaded() and not UIManager.IsWorldMapShowing():
+        if Map.IsMapReady() and Party.IsPartyLoaded() and not UIManager.IsWorldMapShowing() and not Map.IsInCinematic():
             if self.reset:
                 self.reset          = False
                 self.geometry       = Map.Pathing.GetComputedGeometry()
@@ -746,9 +727,11 @@ def configure():
             PyImGui.push_style_color(PyImGui.ImGuiCol.FrameBgActive,    (0.4, 0.4, 0.4, 1))
             PyImGui.push_style_color(PyImGui.ImGuiCol.SliderGrab,       (0.0, 0.0, 0.0, 1))
             PyImGui.push_style_color(PyImGui.ImGuiCol.SliderGrabActive, (0.0, 0.0, 0.0, 1))
-            PyImGui.push_style_color(PyImGui.ImGuiCol.Button,           (0.2, 0.2, 0.2, 1))
-            PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered,    (0.3, 0.3, 0.3, 1))
-            PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonActive,     (0.4, 0.4, 0.4, 1))
+            PyImGui.push_style_color(PyImGui.ImGuiCol.Button,           (0.35, 0.35, 0.35, 1))
+            PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered,    (0.45, 0.45, 0.45, 1))
+            PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonActive,     (0.55, 0.55, 0.55, 1))
+
+            PyImGui.push_style_color(PyImGui.ImGuiCol.CheckMark,     (0.9, 0.9, 0.9, 1))
 
             header_opened = False
 
@@ -783,9 +766,7 @@ def configure():
                     PyImGui.same_line(0.0, -1)
                     PyImGui.push_item_width(80)
                     marker.size = PyImGui.slider_int(f'##Size{marker.name}',  marker.size,  1, 20)
-                    PyImGui.pop_item_width()
                     PyImGui.same_line(0.0, -1)
-                    PyImGui.push_item_width(80)
                     marker.shape = items[PyImGui.combo(f'##Shape{marker.name}',  items.index(marker.shape),  items)]
                     PyImGui.pop_item_width()
                     PyImGui.same_line(0.0, -1)
@@ -794,37 +775,58 @@ def configure():
                 PyImGui.separator()
 
                 compass.config.show_spirit_range = PyImGui.checkbox(f'Show Spirit Ranges', compass.config.show_spirit_range)
+                PyImGui.same_line(0.0, -1)
+                PyImGui.push_item_width(200)
                 compass.config.spirit_alpha = PyImGui.slider_int(f'Spirit Range Alpha', compass.config.spirit_alpha, 0, 255)
+                PyImGui.pop_item_width()
 
                 PyImGui.separator()
 
-                PyImGui.indent(4)
                 for name, marker in compass.config.custom_markers.items():
+
+                    PyImGui.push_style_color(PyImGui.ImGuiCol.CheckMark, Utils.ColorToTuple(marker.color))
+
+                    marker.visible = PyImGui.checkbox(f'##visible{name}', marker.visible)
+                    PyImGui.same_line(0.0, -1)
                     if PyImGui.collapsing_header(f'{name}##header'):
-                        PyImGui.indent(10)
+                        header_opened = True
+                        PyImGui.indent(14)
+                        PyImGui.push_item_width(120)
                         marker.model_id = PyImGui.input_int(f'Model ID##{name}', marker.model_id)
-
-                        if PyImGui.button(f'Get Model ID from Target##{name}'):
+                        
+                        PyImGui.same_line(0.0, -1)
+                        if PyImGui.button(f'Get from Target##{name}', 224):
                             marker.model_id = Agent.GetPlayerNumber(Player.GetTargetID())
-
-                        marker.visible = PyImGui.checkbox(f'Visible##{name}', marker.visible)
+                        
                         marker.size = PyImGui.slider_int(f'Size##{name}',  marker.size,  1, 20)
+                        PyImGui.pop_item_width()
+                        PyImGui.same_line(0.0, 42)
+                        marker.color = Utils.TupleToColor(PyImGui.color_edit4(f'Color##{name}', Utils.ColorToTuple(marker.color)))
+                        PyImGui.push_item_width(120)
                         items = ['Circle','Tear', 'Square']
                         marker.shape = items[PyImGui.combo(f'Shape##{name}',  items.index(marker.shape),  items)]
-                        marker.color = Utils.TupleToColor(PyImGui.color_edit4(f'Color##{name}', Utils.ColorToTuple(marker.color)))
+                        PyImGui.pop_item_width()
+                        PyImGui.push_item_width(224)
+                        PyImGui.same_line(0.0, 30)
                         marker.fill_range = PyImGui.slider_int(f'Fill Range##{name}',  marker.fill_range or 0,  0, 5000)
-                        if PyImGui.button(f'Delete Marker##{name}'):
+                        PyImGui.pop_item_width()
+                        PyImGui.dummy(1,0)
+                        if PyImGui.button(f'Delete Marker##{name}', 417):
                             compass.config.custom_markers.pop(name)
                             compass.ini.delete_section(f'custom_marker_{name}')
                             break
-                        PyImGui.unindent(10)
-                PyImGui.unindent(4)
+                        PyImGui.unindent(14)
 
-                if PyImGui.button('Add Custom Agent'):
+                PyImGui.push_style_color(PyImGui.ImGuiCol.CheckMark,     (0.9, 0.9, 0.9, 1))
+
+                #PyImGui.indent(4)
+                PyImGui.push_item_width(150)
+                compass.config.custom_name = PyImGui.input_text('##agent_name', compass.config.custom_name)
+                PyImGui.pop_item_width()
+                PyImGui.same_line(0.0, -1)
+                if PyImGui.button('Add'):
                     compass.config.AddCustomMarker(compass.config.custom_name)
                     compass.config.custom_name = 'Custom Agent Name'
-                PyImGui.same_line(0.0, -1)
-                compass.config.custom_name = PyImGui.input_text('##agent_name', compass.config.custom_name)
 
                 PyImGui.unindent(10)
 
@@ -847,7 +849,9 @@ def configure():
             if PyImGui.collapsing_header(f'Pathing'):
                 PyImGui.indent(10)
                 header_opened = True
+                compass.primitives_set = False
                 compass.pathing.visible = PyImGui.checkbox('Visible', compass.pathing.visible)
+                PyImGui.same_line(0.0, -1)
                 compass.pathing.color = Utils.TupleToColor(PyImGui.color_edit4('', Utils.ColorToTuple(compass.pathing.color)))
                 PyImGui.unindent(10)
 

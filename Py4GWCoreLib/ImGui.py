@@ -2,6 +2,7 @@ import Py4GW
 import PyImGui
 from enum import Enum, IntEnum
 from .Overlay import Overlay
+from Py4GWCoreLib.Py4GWcorelib import Color
 
 from enum import IntEnum
 
@@ -41,7 +42,21 @@ class ImGui:
         SeparatorTextAlign = 26
         SeparatorTextPadding = 27
         COUNT = 28
-    
+        
+    @staticmethod
+    def DrawTexture(texture_path: str, width: float = 32.0, height: float = 32.0):
+        Overlay().DrawTexture(texture_path, width, height)
+     
+    @staticmethod   
+    def DrawTexturedRect(x: float, y: float, width: float, height: float, texture_path: str):
+        Overlay().BeginDraw()
+        Overlay().DrawTexturedRect(x, y, width, height, texture_path)
+        Overlay().EndDraw()
+        
+    @staticmethod
+    def ImageButton(caption: str, texture_path: str, width: float = 32.0, height: float = 32.0, frame_padding: int = -1) -> bool:
+        return Overlay().ImageButton(caption, texture_path, width, height, frame_padding)
+        
     @staticmethod
     def show_tooltip(text: str):
         """
@@ -55,6 +70,20 @@ class ImGui:
             PyImGui.text(text)
             PyImGui.end_tooltip()
 
+
+    @staticmethod
+    def colored_button(label: str, button_color:Color, hovered_color:Color, active_color:Color, width=0, height=0):
+        clicked = False
+
+        PyImGui.push_style_color(PyImGui.ImGuiCol.Button, button_color.to_tuple_normalized())  # On color
+        PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered, hovered_color.to_tuple_normalized())  # Hover color
+        PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonActive, active_color.to_tuple_normalized())
+
+        clicked = PyImGui.button(label, width, height)
+
+        PyImGui.pop_style_color(3)
+        
+        return clicked
 
     @staticmethod
     def toggle_button(label: str, v: bool, width=0, height =0) -> bool:
